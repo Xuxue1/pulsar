@@ -70,6 +70,7 @@ import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs;
 import org.apache.zookeeper.ZooKeeper;
 import org.apache.zookeeper.ZooKeeper.States;
+import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -107,6 +108,14 @@ public abstract class AdminResource extends PulsarWebResource {
 
     protected void zkCreateOptimistic(String path, byte[] content) throws Exception {
         ZkUtils.createFullPathOptimistic(globalZk(), path, content, ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+    }
+
+    protected boolean zkPathExists(String path) throws KeeperException, InterruptedException {
+        Stat stat = globalZk().exists(path, false);
+        if (null != stat) {
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -234,6 +243,19 @@ public abstract class AdminResource extends PulsarWebResource {
         }
     }
 
+    protected void validateGlobalNamespaceOwnership(String property, String namespace) {
+        try {
+            this.namespaceName = NamespaceName.get(property, namespace);
+            validateGlobalNamespaceOwnership(this.namespaceName);
+        } catch (IllegalArgumentException e) {
+            throw new RestException(Status.PRECONDITION_FAILED, "Tenant name or namespace is not valid");
+        } catch (RestException re) {
+            throw new RestException(Status.PRECONDITION_FAILED, "Namespace does not have any clusters configured");
+        } catch (Exception e) {
+            log.warn("Failed to validate global cluster configuration : ns={}  emsg={}", namespace, e.getMessage());
+            throw new RestException(Status.SERVICE_UNAVAILABLE, "Failed to validate global cluster configuration");
+        }
+    }
     @Deprecated
     protected void validateNamespaceName(String property, String cluster, String namespace) {
         try {
@@ -293,7 +315,7 @@ public abstract class AdminResource extends PulsarWebResource {
     protected void validateBrokerName(String broker) throws MalformedURLException {
         String brokerUrl = String.format("http://%s", broker);
         String brokerUrlTls = String.format("https://%s", broker);
-        if (!brokerUrl.equals(pulsar().getWebServiceAddress())
+        if (!brokerUrl.equals(pulsar().getSafeWebServiceAddress())
                 && !brokerUrlTls.equals(pulsar().getWebServiceAddressTls())) {
             String[] parts = broker.split(":");
             checkArgument(parts.length == 2, "Invalid broker url %s", broker);
@@ -350,8 +372,8 @@ public abstract class AdminResource extends PulsarWebResource {
 
         final String cluster = config.getClusterName();
         // attach default dispatch rate polices
-        if (policies.clusterDispatchRate.isEmpty()) {
-            policies.clusterDispatchRate.put(cluster, dispatchRate());
+        if (policies.topicDispatchRate.isEmpty()) {
+            policies.topicDispatchRate.put(cluster, dispatchRate());
         }
 
         if (policies.subscriptionDispatchRate.isEmpty()) {
@@ -378,7 +400,7 @@ public abstract class AdminResource extends PulsarWebResource {
     protected DispatchRate subscriptionDispatchRate() {
         return new DispatchRate(
                 pulsar().getConfiguration().getDispatchThrottlingRatePerSubscriptionInMsg(),
-                pulsar().getConfiguration().getDispatchThrottlingRatePerSubscribeInByte(),
+                pulsar().getConfiguration().getDispatchThrottlingRatePerSubscriptionInByte(),
                 1
         );
     }
@@ -561,7 +583,7 @@ public abstract class AdminResource extends PulsarWebResource {
             String partitionedTopicPath = path(PARTITIONED_TOPIC_PATH_ZNODE, namespaceName.toString(), topicDomain.value());
             List<String> topics = globalZk().getChildren(partitionedTopicPath, false);
             partitionedTopics = topics.stream()
-                    .map(s -> String.format("persistent://%s/%s", namespaceName.toString(), decode(s)))
+                    .map(s -> String.format("%s://%s/%s", topicDomain.value(), namespaceName.toString(), decode(s)))
                     .collect(Collectors.toList());
         } catch (KeeperException.NoNodeException e) {
             // NoNode means there are no partitioned topics in this domain for this namespace

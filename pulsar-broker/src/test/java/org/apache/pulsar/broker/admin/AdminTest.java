@@ -499,8 +499,15 @@ public class AdminTest extends MockedPulsarServiceBaseTest {
             assertEquals(e.getResponse().getStatus(), Status.PRECONDITION_FAILED.getStatusCode());
         }
 
+        // Check tenantInfo is null
+        TenantInfo nullTenantInfo = new TenantInfo();
+        properties.createTenant("tenant-config-is-null", null);
+        assertEquals(properties.getTenantAdmin("tenant-config-is-null"), nullTenantInfo);
+
+
         namespaces.deleteNamespace("my-tenant", "use", "my-namespace", false);
         properties.deleteTenant("my-tenant");
+        properties.deleteTenant("tenant-config-is-null");
     }
 
     @Test
@@ -628,7 +635,7 @@ public class AdminTest extends MockedPulsarServiceBaseTest {
         assertTrue(list.isEmpty());
         // create topic
         assertEquals(persistentTopics.getPartitionedTopicList(property, cluster, namespace), Lists.newArrayList());
-        persistentTopics.createPartitionedTopic(property, cluster, namespace, topic, 5, false);
+        persistentTopics.createPartitionedTopic(property, cluster, namespace, topic, 5);
         assertEquals(persistentTopics.getPartitionedTopicList(property, cluster, namespace), Lists
                 .newArrayList(String.format("persistent://%s/%s/%s/%s", property, cluster, namespace, topic)));
 

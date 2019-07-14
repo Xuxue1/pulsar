@@ -37,6 +37,8 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -51,7 +53,6 @@ import javax.ws.rs.core.Response.Status;
 
 import org.apache.pulsar.client.admin.LongRunningProcessStatus;
 import org.apache.pulsar.client.admin.OffloadProcessStatus;
-import org.apache.pulsar.client.admin.PersistentTopics;
 import org.apache.pulsar.client.admin.PulsarAdminException;
 import org.apache.pulsar.client.admin.PulsarAdminException.NotFoundException;
 import org.apache.pulsar.client.admin.Topics;
@@ -61,7 +62,7 @@ import org.apache.pulsar.client.api.MessageId;
 import org.apache.pulsar.client.api.Schema;
 import org.apache.pulsar.client.impl.MessageIdImpl;
 import org.apache.pulsar.client.impl.MessageImpl;
-import org.apache.pulsar.common.api.Commands;
+import org.apache.pulsar.common.protocol.Commands;
 import org.apache.pulsar.common.api.proto.PulsarApi;
 import org.apache.pulsar.common.api.proto.PulsarApi.KeyValue;
 import org.apache.pulsar.common.api.proto.PulsarApi.SingleMessageMetadata;
@@ -78,13 +79,12 @@ import org.apache.pulsar.common.util.Codec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@SuppressWarnings("deprecation")
-public class TopicsImpl extends BaseResource implements Topics, PersistentTopics {
+public class TopicsImpl extends BaseResource implements Topics {
     private final WebTarget adminTopics;
     private final WebTarget adminV2Topics;
     private final String BATCH_HEADER = "X-Pulsar-num-batch-message";
-    public TopicsImpl(WebTarget web, Authentication auth) {
-        super(auth);
+    public TopicsImpl(WebTarget web, Authentication auth, long readTimeoutMs) {
+        super(auth, readTimeoutMs);
         adminTopics = web.path("/admin");
         adminV2Topics = web.path("/admin/v2");
     }
@@ -136,7 +136,7 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
         }
     }
 
@@ -202,10 +202,29 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
         }
     }
 
+    @Override
+    public void createNonPartitionedTopic(String topic) throws PulsarAdminException {
+    	try {
+    		createNonPartitionedTopicAsync(topic).get();
+    	} catch (ExecutionException e) {
+            throw (PulsarAdminException) e.getCause();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new PulsarAdminException(e);
+        }
+    }
+    
+    @Override
+    public CompletableFuture<Void> createNonPartitionedTopicAsync(String topic){
+    	TopicName tn = validateTopic(topic);
+    	WebTarget path = topicPath(tn);
+    	return asyncPutRequest(path, Entity.entity("", MediaType.APPLICATION_JSON));
+    }
+    
     @Override
     public CompletableFuture<Void> createPartitionedTopicAsync(String topic, int numPartitions) {
         checkArgument(numPartitions > 1, "Number of partitions should be more than 1");
@@ -222,7 +241,7 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
         }
     }
 
@@ -242,7 +261,7 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
         }
     }
 
@@ -280,7 +299,7 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
         }
     }
 
@@ -305,7 +324,7 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
         }
     }
 
@@ -325,7 +344,7 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
         }
     }
 
@@ -344,7 +363,7 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
         }
     }
 
@@ -372,12 +391,14 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
     @Override
     public TopicStats getStats(String topic) throws PulsarAdminException {
         try {
-            return getStatsAsync(topic).get();
+            return getStatsAsync(topic).get(this.readTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (ExecutionException e) {
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
+        } catch (TimeoutException e) {
+            throw new PulsarAdminException.TimeoutException(e);
         }
     }
 
@@ -405,12 +426,14 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
     @Override
     public PersistentTopicInternalStats getInternalStats(String topic) throws PulsarAdminException {
         try {
-            return getInternalStatsAsync(topic).get();
+            return getInternalStatsAsync(topic).get(this.readTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (ExecutionException e) {
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
+        } catch (TimeoutException e) {
+            throw new PulsarAdminException.TimeoutException(e);
         }
     }
 
@@ -438,12 +461,14 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
     @Override
     public JsonObject getInternalInfo(String topic) throws PulsarAdminException {
         try {
-            return getInternalInfoAsync(topic).get();
+            return getInternalInfoAsync(topic).get(this.readTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (ExecutionException e) {
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
+        } catch (TimeoutException e) {
+            throw new PulsarAdminException.TimeoutException(e);
         }
     }
 
@@ -472,12 +497,14 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
     public PartitionedTopicStats getPartitionedStats(String topic, boolean perPartition)
             throws PulsarAdminException {
         try {
-            return getPartitionedStatsAsync(topic, perPartition).get();
+            return getPartitionedStatsAsync(topic, perPartition).get(this.readTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (ExecutionException e) {
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
+        } catch (TimeoutException e) {
+            throw new PulsarAdminException.TimeoutException(e);
         }
     }
 
@@ -486,6 +513,7 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
             boolean perPartition) {
         TopicName tn = validateTopic(topic);
         WebTarget path = topicPath(tn, "partitioned-stats");
+        path = path.queryParam("perPartition", perPartition);
         final CompletableFuture<PartitionedTopicStats> future = new CompletableFuture<>();
         asyncGetRequest(path,
                 new InvocationCallback<PartitionedTopicStats>() {
@@ -510,12 +538,14 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
     public PartitionedTopicInternalStats getPartitionedInternalStats(String topic)
             throws PulsarAdminException {
         try {
-            return getPartitionedInternalStatsAsync(topic).get();
+            return getPartitionedInternalStatsAsync(topic).get(this.readTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (ExecutionException e) {
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
+        } catch (TimeoutException e) {
+            throw new PulsarAdminException.TimeoutException(e);
         }
     }
 
@@ -543,12 +573,14 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
     @Override
     public void deleteSubscription(String topic, String subName) throws PulsarAdminException {
         try {
-            deleteSubscriptionAsync(topic, subName).get();
+            deleteSubscriptionAsync(topic, subName).get(this.readTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (ExecutionException e) {
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
+        } catch (TimeoutException e) {
+            throw new PulsarAdminException.TimeoutException(e);
         }
     }
 
@@ -568,7 +600,7 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
         }
     }
 
@@ -583,12 +615,14 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
     @Override
     public void skipMessages(String topic, String subName, long numMessages) throws PulsarAdminException {
         try {
-            skipMessagesAsync(topic, subName, numMessages).get();
+            skipMessagesAsync(topic, subName, numMessages).get(this.readTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (ExecutionException e) {
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
+        } catch (TimeoutException e) {
+            throw new PulsarAdminException.TimeoutException(e);
         }
     }
 
@@ -603,12 +637,14 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
     @Override
     public void expireMessages(String topic, String subName, long expireTimeInSeconds) throws PulsarAdminException {
         try {
-            expireMessagesAsync(topic, subName, expireTimeInSeconds).get();
+            expireMessagesAsync(topic, subName, expireTimeInSeconds).get(this.readTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (ExecutionException e) {
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
+        } catch (TimeoutException e) {
+            throw new PulsarAdminException.TimeoutException(e);
         }
     }
 
@@ -624,12 +660,14 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
     @Override
     public void expireMessagesForAllSubscriptions(String topic, long expireTimeInSeconds) throws PulsarAdminException {
         try {
-            expireMessagesForAllSubscriptionsAsync(topic, expireTimeInSeconds).get();
+            expireMessagesForAllSubscriptionsAsync(topic, expireTimeInSeconds).get(this.readTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (ExecutionException e) {
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
+        } catch (TimeoutException e) {
+            throw new PulsarAdminException.TimeoutException(e);
         }
     }
 
@@ -671,12 +709,14 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
     public List<Message<byte[]>> peekMessages(String topic, String subName, int numMessages)
             throws PulsarAdminException {
         try {
-            return peekMessagesAsync(topic, subName, numMessages).get();
+            return peekMessagesAsync(topic, subName, numMessages).get(this.readTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (ExecutionException e) {
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
+        } catch (TimeoutException e) {
+            throw new PulsarAdminException.TimeoutException(e);
         }
     }
 
@@ -888,9 +928,7 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
         }
 
         String msgId = response.getHeaderString("X-Pulsar-Message-ID");
-        InputStream stream = null;
-        try {
-            stream = (InputStream) response.getEntity();
+        try (InputStream stream = (InputStream) response.getEntity()) {
             byte[] data = new byte[stream.available()];
             stream.read(data);
 
@@ -900,9 +938,9 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
             if (tmp != null) {
                 properties.put("publish-time", (String) tmp);
             }
-            tmp =  headers.getFirst(BATCH_HEADER);
+            tmp = headers.getFirst(BATCH_HEADER);
             if (response.getHeaderString(BATCH_HEADER) != null) {
-                properties.put(BATCH_HEADER, (String)tmp);
+                properties.put(BATCH_HEADER, (String) tmp);
                 return getIndividualMsgsFromBatch(topic, msgId, data, properties);
             }
             for (Entry<String, List<Object>> entry : headers.entrySet()) {
@@ -914,11 +952,7 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
             }
 
             return Collections.singletonList(new MessageImpl<byte[]>(topic, msgId, properties,
-                                                                     Unpooled.wrappedBuffer(data), Schema.BYTES));
-        } finally {
-            if (stream != null) {
-                stream.close();
-            }
+                    Unpooled.wrappedBuffer(data), Schema.BYTES));
         }
     }
 
@@ -953,12 +987,14 @@ public class TopicsImpl extends BaseResource implements Topics, PersistentTopics
     @Override
     public MessageId getLastMessageId(String topic) throws PulsarAdminException {
         try {
-            return (MessageIdImpl) getLastMessageIdAsync(topic).get();
+            return getLastMessageIdAsync(topic).get(this.readTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (ExecutionException e) {
             throw (PulsarAdminException) e.getCause();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e.getCause());
+            throw new PulsarAdminException(e);
+        } catch (TimeoutException e) {
+            throw new PulsarAdminException.TimeoutException(e);
         }
     }
 

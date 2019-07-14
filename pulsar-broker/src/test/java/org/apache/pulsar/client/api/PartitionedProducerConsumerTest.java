@@ -22,6 +22,7 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
 
+import io.netty.util.Timeout;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -34,7 +35,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.apache.pulsar.client.impl.PartitionedProducerImpl;
+import org.apache.pulsar.client.impl.*;
 import org.apache.pulsar.common.naming.TopicName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,6 +72,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
     @Test(timeOut = 30000)
     public void testRoundRobinProducer() throws Exception {
         log.info("-- Starting {} test --", methodName);
+        PulsarClient pulsarClient = newPulsarClient(lookupUrl.toString(), 0);// Creates new client connection
 
         int numPartitions = 4;
         TopicName topicName = TopicName.get("persistent://my-property/my-ns/my-partitionedtopic1-" + System.currentTimeMillis());
@@ -83,6 +85,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
 
         Consumer<byte[]> consumer = pulsarClient.newConsumer().topic(topicName.toString())
                 .subscriptionName("my-partitioned-subscriber").subscribe();
+        assertEquals(consumer.getTopic(), topicName.toString());
 
         for (int i = 0; i < 10; i++) {
             String message = "my-message-" + i;
@@ -103,6 +106,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
         producer.close();
         consumer.unsubscribe();
         consumer.close();
+        pulsarClient.close();
         admin.topics().deletePartitionedTopic(topicName.toString());
 
         log.info("-- Exiting {} test --", methodName);
@@ -128,6 +132,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
 
     @Test(timeOut = 30000)
     public void testCustomPartitionProducer() throws Exception {
+        PulsarClient pulsarClient = newPulsarClient(lookupUrl.toString(), 0);// Creates new client connection
         TopicName topicName = null;
         Producer<byte[]> producer = null;
         Consumer<byte[]> consumer = null;
@@ -169,6 +174,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
             producer.close();
             consumer.unsubscribe();
             consumer.close();
+            pulsarClient.close();
             admin.topics().deletePartitionedTopic(topicName.toString());
 
             log.info("-- Exiting {} test --", methodName);
@@ -178,6 +184,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
     @Test(timeOut = 30000)
     public void testSinglePartitionProducer() throws Exception {
         log.info("-- Starting {} test --", methodName);
+        PulsarClient pulsarClient = newPulsarClient(lookupUrl.toString(), 0);// Creates new client connection
 
         int numPartitions = 4;
         TopicName topicName = TopicName
@@ -212,6 +219,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
         producer.close();
         consumer.unsubscribe();
         consumer.close();
+        pulsarClient.close();
         admin.topics().deletePartitionedTopic(topicName.toString());
 
         log.info("-- Exiting {} test --", methodName);
@@ -220,6 +228,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
     @Test(timeOut = 30000)
     public void testKeyBasedProducer() throws Exception {
         log.info("-- Starting {} test --", methodName);
+        PulsarClient pulsarClient = newPulsarClient(lookupUrl.toString(), 0);// Creates new client connection
 
         int numPartitions = 4;
         TopicName topicName = TopicName
@@ -256,6 +265,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
         producer.close();
         consumer.unsubscribe();
         consumer.close();
+        pulsarClient.close();
         admin.topics().deletePartitionedTopic(topicName.toString());
 
         log.info("-- Exiting {} test --", methodName);
@@ -273,6 +283,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
     @Test(timeOut = 100000)
     public void testPauseAndResume() throws Exception {
         log.info("-- Starting {} test --", methodName);
+        PulsarClient pulsarClient = newPulsarClient(lookupUrl.toString(), 0);// Creates new client connection
 
         int numPartitions = 2;
         String topicName = TopicName
@@ -319,6 +330,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
 
         consumer.close();
         producer.close();
+        pulsarClient.close();
         log.info("-- Exiting {} test --", methodName);
     }
 
@@ -334,9 +346,15 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
         Consumer<byte[]> consumer = pulsarClient.newConsumer().topic(topicName.toString())
                 .subscriptionName("my-subscriber-name").subscribe();
 
+        Producer<byte[]> producer = pulsarClient.newProducer().topic(topicName.toString())
+                .enableBatching(false)
+                .messageRoutingMode(MessageRoutingMode.SinglePartition)
+                .create();
+
         try {
-            Message<byte[]> msg = MessageBuilder.create().setContent("InvalidMessage".getBytes()).build();
-            consumer.acknowledge(msg);
+            TypedMessageBuilderImpl<byte[]> mb = (TypedMessageBuilderImpl<byte[]>) producer.newMessage()
+                    .value("InvalidMessage".getBytes());
+            consumer.acknowledge(mb.getMessage());
         } catch (PulsarClientException.InvalidMessageException e) {
             // ok
         }
@@ -357,10 +375,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
             // ok
         }
 
-        Producer<byte[]> producer = pulsarClient.newProducer().topic(topicName.toString())
-            .enableBatching(false)
-            .messageRoutingMode(MessageRoutingMode.SinglePartition)
-            .create();
+
         producer.close();
 
         try {
@@ -492,6 +507,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
     @Test(timeOut = 30000)
     public void testAsyncPartitionedProducerConsumerQueueSizeOne() throws Exception {
         log.info("-- Starting {} test --", methodName);
+        PulsarClient pulsarClient = newPulsarClient(lookupUrl.toString(), 0);// Creates new client connection
 
         final int totalMsg = 100;
         final Set<String> produceMsgs = Sets.newHashSet();
@@ -534,6 +550,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
         producer.close();
         consumer.unsubscribe();
         consumer.close();
+        pulsarClient.close();
         admin.topics().deletePartitionedTopic(topicName.toString());
 
         log.info("-- Exiting {} test --", methodName);
@@ -547,6 +564,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
     @Test(timeOut = 30000)
     public void testFairDistributionForPartitionConsumers() throws Exception {
         log.info("-- Starting {} test --", methodName);
+        PulsarClient pulsarClient = newPulsarClient(lookupUrl.toString(), 0);// Creates new client connection
 
         final int numPartitions = 2;
         final String topicName = "persistent://my-property/my-ns/my-topic-" + System.currentTimeMillis();
@@ -596,6 +614,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
         producer2.close();
         consumer.unsubscribe();
         consumer.close();
+        pulsarClient.close();
         admin.topics().deletePartitionedTopic(topicName);
 
         log.info("-- Exiting {} test --", methodName);
@@ -648,6 +667,184 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
         assertEquals(pulsarClient.getPartitionsForTopic(nonPartitionedTopic).join(),
                 Collections.singletonList(nonPartitionedTopic));
     }
+
+    @Test
+    public void testMessageIdForSubscribeToSinglePartition() throws Exception {
+        PulsarClient pulsarClient = newPulsarClient(lookupUrl.toString(), 0);// Creates new client connection
+        TopicName topicName = null;
+        TopicName partition2TopicName = null;
+        Producer<byte[]> producer = null;
+        Consumer<byte[]> consumer1 = null;
+        Consumer<byte[]> consumer2 = null;
+        final int numPartitions = 4;
+        final int totalMessages = 30;
+
+        try {
+            log.info("-- Starting {} test --", methodName);
+
+            topicName = TopicName.get("persistent://my-property/my-ns/my-topic-" + System.currentTimeMillis());
+            partition2TopicName = topicName.getPartition(2);
+
+            admin.topics().createPartitionedTopic(topicName.toString(), numPartitions);
+
+            producer = pulsarClient.newProducer().topic(topicName.toString())
+                .messageRouter(new AlwaysTwoMessageRouter())
+                .create();
+
+            consumer1 = pulsarClient.newConsumer().topic(topicName.toString())
+                .subscriptionName("subscriber-partitioned")
+                .subscriptionInitialPosition(SubscriptionInitialPosition.Earliest)
+                .subscriptionType(SubscriptionType.Exclusive)
+                .subscribe();
+
+            consumer2 = pulsarClient.newConsumer().topic(partition2TopicName.toString())
+                .subscriptionName("subscriber-single")
+                .subscriptionInitialPosition(SubscriptionInitialPosition.Earliest)
+                .subscriptionType(SubscriptionType.Exclusive)
+                .subscribe();
+
+            for (int i = 0; i < totalMessages; i++) {
+                String message = "my-message-" + i;
+                producer.newMessage().key(String.valueOf(i)).value(message.getBytes()).send();
+            }
+            producer.flush();
+
+            Message<byte[]> msg;
+
+            for (int i = 0; i < totalMessages; i ++) {
+                msg = consumer1.receive(5, TimeUnit.SECONDS);
+                Assert.assertEquals(((MessageIdImpl)((TopicMessageIdImpl)msg.getMessageId()).getInnerMessageId()).getPartitionIndex(), 2);
+                consumer1.acknowledge(msg);
+            }
+
+            for (int i = 0; i < totalMessages; i ++) {
+                msg = consumer2.receive(5, TimeUnit.SECONDS);
+                Assert.assertEquals(((MessageIdImpl)msg.getMessageId()).getPartitionIndex(), 2);
+                consumer2.acknowledge(msg);
+            }
+
+        } finally {
+            producer.close();
+            consumer1.unsubscribe();
+            consumer1.close();
+            consumer2.unsubscribe();
+            consumer2.close();
+            pulsarClient.close();
+            admin.topics().deletePartitionedTopic(topicName.toString());
+
+            log.info("-- Exiting {} test --", methodName);
+        }
+    }
+
+
+    /**
+     * It verifies that consumer producer auto update for partitions extend.
+     *
+     * Steps:
+     * 1. create topic with 2 partitions, and producer consumer
+     * 2. update partition from 2 to 3.
+     * 3. trigger auto update in producer, after produce, consumer will only get messages from 2 partitions.
+     * 4. trigger auto update in consumer, after produce, consumer will get all messages from 3 partitions.
+     *
+     * @throws Exception
+     */
+    @Test(timeOut = 30000)
+    public void testAutoUpdatePartitionsForProducerConsumer() throws Exception {
+        log.info("-- Starting {} test --", methodName);
+        PulsarClient pulsarClient = newPulsarClient(lookupUrl.toString(), 0);// Creates new client connection
+
+        final int numPartitions = 2;
+        final String topicName = "persistent://my-property/my-ns/my-topic-" + System.currentTimeMillis();
+        final String producerMsg = "producerMsg";
+        final int totalMessages = 30;
+
+        admin.topics().createPartitionedTopic(topicName, numPartitions);
+
+        Producer<byte[]> producer = pulsarClient.newProducer().topic(topicName)
+            .messageRoutingMode(MessageRoutingMode.RoundRobinPartition)
+            .enableBatching(false)
+            .autoUpdatePartitions(true)
+            .create();
+
+        Consumer<byte[]> consumer = pulsarClient.newConsumer().topic(topicName)
+            .subscriptionName("my-partitioned-subscriber")
+            .subscriptionType(SubscriptionType.Shared)
+            .autoUpdatePartitions(true)
+            .subscribe();
+
+        // 1. produce and consume 2 partitions
+        for (int i = 0; i < totalMessages; i++) {
+            producer.send((producerMsg + " first round " + "message index: " + i).getBytes());
+        }
+        int messageSet = 0;
+        Message<byte[]> message = consumer.receive();
+        do {
+            messageSet ++;
+            consumer.acknowledge(message);
+            log.info("Consumer acknowledged : " + new String(message.getData()));
+            message = consumer.receive(200, TimeUnit.MILLISECONDS);
+        } while (message != null);
+        assertEquals(messageSet, totalMessages);
+
+        // 2. update partition from 2 to 3.
+        admin.topics().updatePartitionedTopic(topicName,3);
+
+        // 3. trigger auto update in producer, after produce, consumer will get 2/3 messages.
+        log.info("trigger partitionsAutoUpdateTimerTask for producer");
+        Timeout timeout = ((PartitionedProducerImpl<byte[]>)producer).getPartitionsAutoUpdateTimeout();
+        timeout.task().run(timeout);
+        Thread.sleep(200);
+
+        for (int i = 0; i < totalMessages; i++) {
+            producer.send((producerMsg + " second round " + "message index: " + i).getBytes());
+        }
+        messageSet = 0;
+        message = consumer.receive();
+        do {
+            messageSet ++;
+            consumer.acknowledge(message);
+            log.info("Consumer acknowledged : " + new String(message.getData()));
+            message = consumer.receive(200, TimeUnit.MILLISECONDS);
+        } while (message != null);
+        assertEquals(messageSet, totalMessages * 2 / 3);
+
+        // 4. trigger auto update in consumer, after produce, consumer will get all messages.
+        log.info("trigger partitionsAutoUpdateTimerTask for consumer");
+        timeout = ((MultiTopicsConsumerImpl<byte[]>)consumer).getPartitionsAutoUpdateTimeout();
+        timeout.task().run(timeout);
+        Thread.sleep(200);
+
+        // former produced messages
+        messageSet = 0;
+        message = consumer.receive();
+        do {
+            messageSet ++;
+            consumer.acknowledge(message);
+            log.info("Consumer acknowledged : " + new String(message.getData()));
+            message = consumer.receive(200, TimeUnit.MILLISECONDS);
+        } while (message != null);
+        assertEquals(messageSet, totalMessages / 3);
+
+        // former produced messages
+        for (int i = 0; i < totalMessages; i++) {
+            producer.send((producerMsg + " third round " + "message index: " + i).getBytes());
+        }
+        messageSet = 0;
+        message = consumer.receive();
+        do {
+            messageSet ++;
+            consumer.acknowledge(message);
+            log.info("Consumer acknowledged : " + new String(message.getData()));
+            message = consumer.receive(200, TimeUnit.MILLISECONDS);
+        } while (message != null);
+        assertEquals(messageSet, totalMessages);
+
+        pulsarClient.close();
+        admin.topics().deletePartitionedTopic(topicName);
+
+        log.info("-- Exiting {} test --", methodName);
+    }
+
 
     private class AlwaysTwoMessageRouter implements MessageRouter {
         @Override

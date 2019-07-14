@@ -27,13 +27,17 @@ import com.facebook.presto.spi.type.RealType;
 import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.spi.type.VarcharType;
 import io.airlift.log.Logger;
+import io.netty.buffer.ByteBuf;
 import org.apache.bookkeeper.mledger.AsyncCallbacks;
 import org.apache.bookkeeper.mledger.Entry;
+import org.apache.bookkeeper.mledger.ManagedLedgerConfig;
 import org.apache.bookkeeper.mledger.ManagedLedgerFactory;
 import org.apache.bookkeeper.mledger.Position;
 import org.apache.bookkeeper.mledger.ReadOnlyCursor;
 import org.apache.bookkeeper.mledger.impl.EntryImpl;
 import org.apache.bookkeeper.mledger.impl.PositionImpl;
+import org.apache.bookkeeper.mledger.impl.ReadOnlyCursorImpl;
+import org.apache.bookkeeper.mledger.proto.MLDataFormats;
 import org.apache.pulsar.client.admin.Namespaces;
 import org.apache.pulsar.client.admin.PulsarAdmin;
 import org.apache.pulsar.client.admin.PulsarAdminException;
@@ -41,18 +45,19 @@ import org.apache.pulsar.client.admin.Schemas;
 import org.apache.pulsar.client.admin.Tenants;
 import org.apache.pulsar.client.admin.Topics;
 import org.apache.pulsar.client.api.Schema;
+import org.apache.pulsar.client.api.schema.SchemaDefinition;
 import org.apache.pulsar.client.impl.schema.AvroSchema;
 import org.apache.pulsar.client.impl.schema.JSONSchema;
-import org.apache.pulsar.common.api.Commands;
+import org.apache.pulsar.common.protocol.Commands;
 import org.apache.pulsar.common.api.proto.PulsarApi;
 import org.apache.pulsar.common.naming.NamespaceName;
 import org.apache.pulsar.common.naming.TopicName;
 import org.apache.pulsar.common.partition.PartitionedTopicMetadata;
 import org.apache.pulsar.common.schema.SchemaInfo;
 import org.apache.pulsar.common.schema.SchemaType;
-import org.apache.pulsar.shade.javax.ws.rs.ClientErrorException;
-import org.apache.pulsar.shade.javax.ws.rs.core.Response;
-import org.apache.pulsar.shade.org.apache.bookkeeper.stats.NullStatsProvider;
+import javax.ws.rs.ClientErrorException;
+import javax.ws.rs.core.Response;
+import org.apache.bookkeeper.stats.NullStatsProvider;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -70,16 +75,15 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.facebook.presto.spi.type.DateType.DATE;
 import static com.facebook.presto.spi.type.TimeType.TIME;
 import static com.facebook.presto.spi.type.TimestampType.TIMESTAMP;
-import static org.apache.pulsar.common.api.Commands.serializeMetadataAndPayload;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyInt;
-import static org.mockito.Matchers.anyString;
+import static org.apache.pulsar.common.protocol.Commands.serializeMetadataAndPayload;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -219,21 +223,19 @@ public abstract class TestPulsarConnector {
             partitionedTopicsToPartitions.put(PARTITIONED_TOPIC_6.toString(), 7);
 
             topicsToSchemas = new HashMap<>();
-            topicsToSchemas.put(TOPIC_1.getSchemaName(), AvroSchema.of(TestPulsarMetadata.Foo.class).getSchemaInfo());
-            topicsToSchemas.put(TOPIC_2.getSchemaName(), AvroSchema.of(TestPulsarMetadata.Foo.class).getSchemaInfo());
-            topicsToSchemas.put(TOPIC_3.getSchemaName(), AvroSchema.of(TestPulsarMetadata.Foo.class).getSchemaInfo());
-            topicsToSchemas.put(TOPIC_4.getSchemaName(), JSONSchema.of(TestPulsarMetadata.Foo.class).getSchemaInfo());
-            topicsToSchemas.put(TOPIC_5.getSchemaName(), JSONSchema.of(TestPulsarMetadata.Foo.class).getSchemaInfo());
-            topicsToSchemas.put(TOPIC_6.getSchemaName(), JSONSchema.of(TestPulsarMetadata.Foo.class).getSchemaInfo());
+            topicsToSchemas.put(TOPIC_1.getSchemaName(), Schema.AVRO(TestPulsarMetadata.Foo.class).getSchemaInfo());
+            topicsToSchemas.put(TOPIC_2.getSchemaName(), Schema.AVRO(TestPulsarMetadata.Foo.class).getSchemaInfo());
+            topicsToSchemas.put(TOPIC_3.getSchemaName(), Schema.AVRO(TestPulsarMetadata.Foo.class).getSchemaInfo());
+            topicsToSchemas.put(TOPIC_4.getSchemaName(), Schema.JSON(TestPulsarMetadata.Foo.class).getSchemaInfo());
+            topicsToSchemas.put(TOPIC_5.getSchemaName(), Schema.JSON(TestPulsarMetadata.Foo.class).getSchemaInfo());
+            topicsToSchemas.put(TOPIC_6.getSchemaName(), Schema.JSON(TestPulsarMetadata.Foo.class).getSchemaInfo());
 
-
-            topicsToSchemas.put(PARTITIONED_TOPIC_1.getSchemaName(), AvroSchema.of(TestPulsarMetadata.Foo.class).getSchemaInfo());
-
-            topicsToSchemas.put(PARTITIONED_TOPIC_2.getSchemaName(), AvroSchema.of(TestPulsarMetadata.Foo.class).getSchemaInfo());
-            topicsToSchemas.put(PARTITIONED_TOPIC_3.getSchemaName(), AvroSchema.of(TestPulsarMetadata.Foo.class).getSchemaInfo());
-            topicsToSchemas.put(PARTITIONED_TOPIC_4.getSchemaName(), JSONSchema.of(TestPulsarMetadata.Foo.class).getSchemaInfo());
-            topicsToSchemas.put(PARTITIONED_TOPIC_5.getSchemaName(), JSONSchema.of(TestPulsarMetadata.Foo.class).getSchemaInfo());
-            topicsToSchemas.put(PARTITIONED_TOPIC_6.getSchemaName(), JSONSchema.of(TestPulsarMetadata.Foo.class).getSchemaInfo());
+            topicsToSchemas.put(PARTITIONED_TOPIC_1.getSchemaName(), Schema.AVRO(TestPulsarMetadata.Foo.class).getSchemaInfo());
+            topicsToSchemas.put(PARTITIONED_TOPIC_2.getSchemaName(), Schema.AVRO(TestPulsarMetadata.Foo.class).getSchemaInfo());
+            topicsToSchemas.put(PARTITIONED_TOPIC_3.getSchemaName(), Schema.AVRO(TestPulsarMetadata.Foo.class).getSchemaInfo());
+            topicsToSchemas.put(PARTITIONED_TOPIC_4.getSchemaName(), Schema.JSON(TestPulsarMetadata.Foo.class).getSchemaInfo());
+            topicsToSchemas.put(PARTITIONED_TOPIC_5.getSchemaName(), Schema.JSON(TestPulsarMetadata.Foo.class).getSchemaInfo());
+            topicsToSchemas.put(PARTITIONED_TOPIC_6.getSchemaName(), Schema.JSON(TestPulsarMetadata.Foo.class).getSchemaInfo());
 
             fooTypes = new HashMap<>();
             fooTypes.put("field1", IntegerType.INTEGER);
@@ -531,14 +533,9 @@ public abstract class TestPulsarConnector {
                     fieldNames10,
                     positionIndices10));
 
-
-            fooColumnHandles.addAll(PulsarInternalColumn.getInternalFields().stream().map(
-                    new Function<PulsarInternalColumn, PulsarColumnHandle>() {
-                        @Override
-                        public PulsarColumnHandle apply(PulsarInternalColumn pulsarInternalColumn) {
-                            return pulsarInternalColumn.getColumnHandle(pulsarConnectorId.toString(), false);
-                        }
-                    }).collect(Collectors.toList()));
+            fooColumnHandles.addAll(PulsarInternalColumn.getInternalFields().stream()
+                .map(pulsarInternalColumn -> pulsarInternalColumn.getColumnHandle(pulsarConnectorId.toString(), false))
+                .collect(Collectors.toList()));
 
             splits = new HashMap<>();
 
@@ -559,11 +556,11 @@ public abstract class TestPulsarConnector {
             fooFunctions = new HashMap<>();
 
             fooFunctions.put("field1", integer -> integer);
-            fooFunctions.put("field2", integer -> String.valueOf(integer));
-            fooFunctions.put("field3", integer -> integer.floatValue());
-            fooFunctions.put("field4", integer -> integer.doubleValue());
+            fooFunctions.put("field2", String::valueOf);
+            fooFunctions.put("field3", Integer::floatValue);
+            fooFunctions.put("field4", Integer::doubleValue);
             fooFunctions.put("field5", integer -> integer % 2 == 0);
-            fooFunctions.put("field6", integer -> integer.longValue());
+            fooFunctions.put("field6", Integer::longValue);
             fooFunctions.put("timestamp", integer -> System.currentTimeMillis());
             fooFunctions.put("time", integer -> {
                 LocalTime now = LocalTime.now(ZoneId.systemDefault());
@@ -622,12 +619,12 @@ public abstract class TestPulsarConnector {
                     .setProducerName("test-producer").setSequenceId(i)
                     .setPublishTime(currentTimeMs + i).build();
 
-            Schema schema = topicsToSchemas.get(topicSchemaName).getType() == SchemaType.AVRO ? AvroSchema.of(Foo.class) : JSONSchema.of(Foo.class);
+            Schema schema = topicsToSchemas.get(topicSchemaName).getType() == SchemaType.AVRO ? AvroSchema.of(SchemaDefinition.<Foo>builder().withPojo(Foo.class).build()) : JSONSchema.of(SchemaDefinition.<Foo>builder().withPojo(Foo.class).build());
 
-            org.apache.pulsar.shade.io.netty.buffer.ByteBuf payload = org.apache.pulsar.shade.io.netty.buffer.Unpooled
+            ByteBuf payload = io.netty.buffer.Unpooled
                     .copiedBuffer(schema.encode(foo));
 
-            org.apache.pulsar.shade.io.netty.buffer.ByteBuf byteBuf = serializeMetadataAndPayload(
+            ByteBuf byteBuf = serializeMetadataAndPayload(
                     Commands.ChecksumType.Crc32c, messageMetadata, payload);
 
             Entry entry = EntryImpl.create(0, i, byteBuf);
@@ -642,45 +639,24 @@ public abstract class TestPulsarConnector {
     private static final Logger log = Logger.get(TestPulsarConnector.class);
 
     protected static List<String> getNamespace(String tenant) {
-        return new LinkedList<>(topicNames.stream().filter(new Predicate<TopicName>() {
-            @Override
-            public boolean test(TopicName topicName) {
-                return topicName.getTenant().equals(tenant);
-            }
-        }).map(new Function<TopicName, String>() {
-            @Override
-            public String apply(TopicName topicName) {
-                return topicName.getNamespace();
-            }
-        }).collect(Collectors.toSet()));
+        return topicNames.stream()
+            .filter(topicName -> topicName.getTenant().equals(tenant))
+            .map(TopicName::getNamespace)
+            .distinct()
+            .collect(Collectors.toCollection(LinkedList::new));
     }
 
     protected static List<String> getTopics(String ns) {
-        return topicNames.stream().filter(new Predicate<TopicName>() {
-            @Override
-            public boolean test(TopicName topicName) {
-                return topicName.getNamespace().equals(ns);
-            }
-        }).map(new Function<TopicName, String>() {
-            @Override
-            public String apply(TopicName topicName) {
-                return topicName.toString();
-            }
-        }).collect(Collectors.toList());
+        return topicNames.stream()
+            .filter(topicName -> topicName.getNamespace().equals(ns))
+            .map(TopicName::toString).collect(Collectors.toList());
     }
 
     protected static List<String> getPartitionedTopics(String ns) {
-        return partitionedTopicNames.stream().filter(new Predicate<TopicName>() {
-            @Override
-            public boolean test(TopicName topicName) {
-                return topicName.getNamespace().equals(ns);
-            }
-        }).map(new Function<TopicName, String>() {
-            @Override
-            public String apply(TopicName topicName) {
-                return topicName.toString();
-            }
-        }).collect(Collectors.toList());
+        return partitionedTopicNames.stream()
+            .filter(topicName -> topicName.getNamespace().equals(ns))
+            .map(TopicName::toString)
+            .collect(Collectors.toList());
     }
 
     @BeforeMethod
@@ -691,12 +667,9 @@ public abstract class TestPulsarConnector {
         this.pulsarConnectorConfig.setMaxSplitMessageQueueSize(100);
 
         Tenants tenants = mock(Tenants.class);
-        doReturn(new LinkedList<>(topicNames.stream().map(new Function<TopicName, String>() {
-            @Override
-            public String apply(TopicName topicName) {
-                return topicName.getTenant();
-            }
-        }).collect(Collectors.toSet()))).when(tenants).getTenants();
+        doReturn(new LinkedList<>(topicNames.stream()
+            .map(TopicName::getTenant)
+            .collect(Collectors.toSet()))).when(tenants).getTenants();
 
         Namespaces namespaces = mock(Namespaces.class);
 
@@ -793,7 +766,7 @@ public abstract class TestPulsarConnector {
                 long entries = topicsToNumEntries.get(schemaName);
 
 
-                ReadOnlyCursor readOnlyCursor = mock(ReadOnlyCursor.class);
+                ReadOnlyCursorImpl readOnlyCursor = mock(ReadOnlyCursorImpl.class);
                 doReturn(entries).when(readOnlyCursor).getNumberOfEntries();
 
                 doAnswer(new Answer<Void>() {
@@ -874,10 +847,10 @@ public abstract class TestPulsarConnector {
 
                                     Schema schema = topicsToSchemas.get(schemaName).getType() == SchemaType.AVRO ? AvroSchema.of(Foo.class) : JSONSchema.of(Foo.class);
 
-                                    org.apache.pulsar.shade.io.netty.buffer.ByteBuf payload = org.apache.pulsar.shade.io.netty.buffer.Unpooled
+                                    ByteBuf payload = io.netty.buffer.Unpooled
                                             .copiedBuffer(schema.encode(foo));
 
-                                    org.apache.pulsar.shade.io.netty.buffer.ByteBuf byteBuf = serializeMetadataAndPayload(
+                                    ByteBuf byteBuf = serializeMetadataAndPayload(
                                             Commands.ChecksumType.Crc32c, messageMetadata, payload);
 
                                     completedBytes += byteBuf.readableBytes();
@@ -906,8 +879,8 @@ public abstract class TestPulsarConnector {
                     @Override
                     public Position answer(InvocationOnMock invocationOnMock) throws Throwable {
                         Object[] args = invocationOnMock.getArguments();
-                        org.apache.pulsar.shade.com.google.common.base.Predicate<Entry> predicate
-                                = (org.apache.pulsar.shade.com.google.common.base.Predicate<Entry>) args[1];
+                        com.google.common.base.Predicate<Entry> predicate
+                                = (com.google.common.base.Predicate<Entry>) args[1];
 
                         String schemaName = TopicName.get(
                                 TopicName.get(
@@ -932,12 +905,14 @@ public abstract class TestPulsarConnector {
                     @Override
                     public Long answer(InvocationOnMock invocationOnMock) throws Throwable {
                         Object[] args = invocationOnMock.getArguments();
-                        org.apache.pulsar.shade.com.google.common.collect.Range<PositionImpl>  range
-                                = (org.apache.pulsar.shade.com.google.common.collect.Range<PositionImpl> ) args[0];
+                        com.google.common.collect.Range<PositionImpl>  range
+                                = (com.google.common.collect.Range<PositionImpl> ) args[0];
 
                         return (range.upperEndpoint().getEntryId() + 1) - range.lowerEndpoint().getEntryId();
                     }
                 });
+
+                when(readOnlyCursor.getCurrentLedgerInfo()).thenReturn(MLDataFormats.ManagedLedgerInfo.LedgerInfo.newBuilder().setLedgerId(0).build());
 
                 return readOnlyCursor;
             }
@@ -947,8 +922,10 @@ public abstract class TestPulsarConnector {
 
         for (Map.Entry<TopicName, PulsarSplit> split : splits.entrySet()) {
 
-            PulsarRecordCursor pulsarRecordCursor = spy(new PulsarRecordCursor(fooColumnHandles, split.getValue(),
-                    pulsarConnectorConfig, managedLedgerFactory, new PulsarConnectorMetricsTracker(new NullStatsProvider())));
+            PulsarRecordCursor pulsarRecordCursor = spy(new PulsarRecordCursor(
+                    fooColumnHandles, split.getValue(),
+                    pulsarConnectorConfig, managedLedgerFactory, new ManagedLedgerConfig(),
+                    new PulsarConnectorMetricsTracker(new NullStatsProvider())));
             this.pulsarRecordCursors.put(split.getKey(), pulsarRecordCursor);
         }
     }

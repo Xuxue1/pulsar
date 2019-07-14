@@ -19,20 +19,20 @@
 #ifndef PRODUCER_HPP_
 #define PRODUCER_HPP_
 
+#include <pulsar/defines.h>
 #include <pulsar/ProducerConfiguration.h>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include <stdint.h>
-
-#pragma GCC visibility push(default)
 
 namespace pulsar {
 class ProducerImplBase;
 class PulsarWrapper;
 class PulsarFriend;
 
-typedef boost::function<void(Result)> FlushCallback;
+typedef std::function<void(Result)> FlushCallback;
+typedef std::shared_ptr<ProducerImplBase> ProducerImplBasePtr;
 
-class Producer {
+class PULSAR_PUBLIC Producer {
    public:
     /**
      * Construct an uninitialized Producer.
@@ -110,6 +110,16 @@ class Producer {
     int64_t getLastSequenceId() const;
 
     /**
+     * Return an identifier for the schema version that this producer was created with.
+     *
+     * When the producer is created, if a schema info was passed, the broker will
+     * determine the version of the passed schema. This identifier should be treated
+     * as an opaque identifier. In particular, even though this is represented as a string, the
+     * version might not be ascii printable.
+     */
+    const std::string& getSchemaVersion() const;
+
+    /**
      * Close the producer and release resources allocated.
      *
      * No more writes will be accepted from this producer. Waits until
@@ -130,7 +140,6 @@ class Producer {
     void closeAsync(CloseCallback callback);
 
    private:
-    typedef boost::shared_ptr<ProducerImplBase> ProducerImplBasePtr;
     explicit Producer(ProducerImplBasePtr);
 
     friend class ClientImpl;
@@ -140,7 +149,5 @@ class Producer {
     ProducerImplBasePtr impl_;
 };
 }  // namespace pulsar
-
-#pragma GCC visibility pop
 
 #endif /* PRODUCER_HPP_ */

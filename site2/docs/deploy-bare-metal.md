@@ -14,6 +14,10 @@ sidebar_label: Bare metal
 > 2. If you want to use all builtin [Pulsar IO](io-overview.md) connectors in your Pulsar deployment, you need to download `apache-pulsar-io-connectors`
 > package and make sure it is installed under `connectors` directory in the pulsar directory on every broker node or on every function-worker node if you
 > have run a separate cluster of function workers for [Pulsar Functions](functions-overview.md).
+>
+> 3. If you want to use [Tiered Storage](concepts-tiered-storage.md) feature in your Pulsar deployment, you need to download `apache-pulsar-offloaders`
+> package and make sure it is installed under `offloaders` directory in the pulsar directory on every broker node. For more details of how to configure
+> this feature, you could reference this [Tiered storage cookbook](cookbooks-tiered-storage.md).
 
 Deploying a Pulsar cluster involves doing the following (in order):
 
@@ -38,6 +42,8 @@ To run Pulsar on bare metal, you are recommended to have:
 
 > However if you don't have enough machines, or are trying out Pulsar in cluster mode (and expand the cluster later),
 > you can even deploy Pulsar in one node, where it will run zookeeper, bookie and broker in same machine.
+
+> If you don't have a DNS server, you can use multi-host in service URL instead.
 
 Each machine in your cluster will need to have [Java 8](http://www.oracle.com/technetwork/java/javase/downloads/index.html) or higher installed.
 
@@ -113,29 +119,59 @@ one of the following ways:
 * using [wget](https://www.gnu.org/software/wget):
 
   ```shell
-  $ wget pulsar:connector_release_url
+  $ wget pulsar:connector_release_url/{connector}-{{pulsar:version}}.nar
   ```
 
-Once the tarball is downloaded, in the pulsar directory, untar the io-connectors package and copy the connectors as `connectors`
-in the pulsar directory:
+Once the nar file is downloaded, copy the file to directory `connectors` in the pulsar directory, 
+for example, if the connector file `pulsar-io-aerospike-{{pulsar:version}}.nar` is downloaded:
 
 ```bash
-$ tar xvfz apache-pulsar-io-connectors-{{pulsar:version}}-bin.tar.gz
-
-// you will find a directory named `apache-pulsar-io-connectors-{{pulsar:version}}` in the pulsar directory
-// then copy the connectors
-
-$ mv apache-pulsar-io-connectors-{{pulsar:version}}/connectors connectors
+$ mkdir connectors
+$ mv pulsar-io-aerospike-{{pulsar:version}}.nar connectors
 
 $ ls connectors
 pulsar-io-aerospike-{{pulsar:version}}.nar
-pulsar-io-cassandra-{{pulsar:version}}.nar
-pulsar-io-kafka-{{pulsar:version}}.nar
-pulsar-io-kinesis-{{pulsar:version}}.nar
-pulsar-io-rabbitmq-{{pulsar:version}}.nar
-pulsar-io-twitter-{{pulsar:version}}.nar
 ...
 ```
+
+## Installing Tiered Storage Offloaders (optional)
+
+> Since release `2.2.0`, Pulsar releases a separate binary distribution, containing the tiered storage offloaders.
+> If you would like to enable tiered storage feature, you can follow the instructions as below; otherwise you can
+> skip this section for now.
+
+To get started using tiered storage offloaders, you'll need to download the offloaders tarball release on every broker node in
+one of the following ways:
+
+* by clicking the link below and downloading the release from an Apache mirror:
+
+  * <a href="pulsar:offloader_release_url" download>Pulsar Tiered Storage Offloaders {{pulsar:version}} release</a>
+
+* from the Pulsar [downloads page](pulsar:download_page_url)
+* from the Pulsar [releases page](https://github.com/apache/pulsar/releases/latest)
+* using [wget](https://www.gnu.org/software/wget):
+
+  ```shell
+  $ wget pulsar:offloader_release_url
+  ```
+
+Once the tarball is downloaded, in the pulsar directory, untar the offloaders package and copy the offloaders as `offloaders`
+in the pulsar directory:
+
+```bash
+$ tar xvfz apache-pulsar-offloaders-{{pulsar:version}}-bin.tar.gz
+
+// you will find a directory named `apache-pulsar-offloaders-{{pulsar:version}}` in the pulsar directory
+// then copy the offloaders
+
+$ mv apache-pulsar-offloaders-{{pulsar:version}}/offloaders offloaders
+
+$ ls offloaders
+tiered-storage-jcloud-{{pulsar:version}}.nar
+```
+
+For more details of how to configure tiered storage feature, you could reference this [Tiered storage cookbook](cookbooks-tiered-storage.md)
+
 
 ## Deploying a ZooKeeper cluster
 
@@ -269,17 +305,26 @@ Pulsar brokers are the last thing you need to deploy in your Pulsar cluster. Bro
 
 ### Configuring Brokers
 
-The most important element of broker configuration is ensuring that that each broker is aware of the ZooKeeper cluster that you've deployed. Make sure that the [`zookeeperServers`](reference-configuration.md#broker-zookeeperServers) and [`configurationStoreServers`](reference-configuration.md#broker-configurationStoreServers) parameters. In this case, since we only have 1 cluster and no configuration store setup, the `configurationStoreServers` will point to the same `zookeeperServers`.
+The most important element of broker configuration is ensuring that each broker is aware of the ZooKeeper cluster that you've deployed. Make sure that the [`zookeeperServers`](reference-configuration.md#broker-zookeeperServers) and [`configurationStoreServers`](reference-configuration.md#broker-configurationStoreServers) parameters. In this case, since we only have 1 cluster and no configuration store setup, the `configurationStoreServers` will point to the same `zookeeperServers`.
 
 ```properties
 zookeeperServers=zk1.us-west.example.com:2181,zk2.us-west.example.com:2181,zk3.us-west.example.com:2181
 configurationStoreServers=zk1.us-west.example.com:2181,zk2.us-west.example.com:2181,zk3.us-west.example.com:2181
 ```
 
-You also need to specify the cluster name (matching the name that you provided when [initializing the cluster's metadata](#initializing-cluster-metadata):
+You also need to specify the cluster name (matching the name that you provided when [initializing the cluster's metadata](#initializing-cluster-metadata)):
 
 ```properties
 clusterName=pulsar-cluster-1
+```
+
+In addition, you need to match the broker and web service ports provided when initializing the cluster's metadata (especially when using a different port from default):
+
+```properties
+brokerServicePort=6650
+brokerServicePortTls=6651
+webServicePort=8080
+webServicePortTls=8443
 ```
 
 > If you deploy Pulsar in a one-node cluster, you should update the replication settings in `conf/broker.conf` to `1`
@@ -299,7 +344,7 @@ clusterName=pulsar-cluster-1
 
 If you want to enable [Pulsar Functions](functions-overview.md), you can follow the instructions as below:
 
-1. Edit `conf/broker.conf` to enable function worker, by setting `functionsWorkerEnabled` to `true`.
+1. Edit `conf/broker.conf` to enable functions worker, by setting `functionsWorkerEnabled` to `true`.
 
     ```conf
     functionsWorkerEnabled=true
@@ -310,6 +355,8 @@ If you want to enable [Pulsar Functions](functions-overview.md), you can follow 
     ```conf
     pulsarFunctionsCluster: pulsar-cluster-1
     ```
+
+If you would like to learn more options about deploying functions worker, please checkout [Deploy and manage functions worker](functions-worker.md).
 
 ### Starting Brokers
 
@@ -346,12 +393,27 @@ Once you've done that, you can publish a message to Pulsar topic:
 $ bin/pulsar-client produce \
   persistent://public/default/test \
   -n 1 \
-  -m "Hello, Pulsar"
+  -m "Hello Pulsar"
 ```
 
 > You may need to use a different cluster name in the topic if you specified a cluster name different from `pulsar-cluster-1`.
 
-This will publish a single message to the Pulsar topic.
+This will publish a single message to the Pulsar topic. In addition, you can subscribe the Pulsar topic in a different terminal before publishing messages as below:
+
+```bash
+$ bin/pulsar-client consume \
+  persistent://public/default/test \
+  -n 100 \
+  -s "consumer-test" \
+  -t "Exclusive"
+```
+
+Once the message above has been successfully published to the topic, you should see it in the standard output:
+
+```bash
+----- got message -----
+Hello Pulsar
+```
 
 ## Running Functions
 

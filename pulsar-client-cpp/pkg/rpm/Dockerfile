@@ -23,7 +23,7 @@ FROM centos:7
 
 RUN yum update -y && \
     yum install -y gcc-c++ make cmake git rpm-build \
-                python-devel createrepo
+                python-devel createrepo libstdc++-static.x86_64
 
 # Download and compile boost
 RUN curl -O -L https://dl.bintray.com/boostorg/release/1.64.0/source/boost_1_64_0.tar.gz && \
@@ -78,5 +78,13 @@ RUN curl -O -L  https://github.com/curl/curl/releases/download/curl-7_61_0/curl-
     CFLAGS=-fPIC ./configure --with-ssl=/usr/local/ssl/ && \
     make && make install && \
     rm -rf /curl-7.61.0.tar.gz /curl-7.61.0
+
+# Zstandard
+RUN curl -O -L https://github.com/facebook/zstd/releases/download/v1.3.7/zstd-1.3.7.tar.gz && \
+    tar xvfz zstd-1.3.7.tar.gz && \
+    cd zstd-1.3.7 && \
+    CFLAGS="-fPIC -O3" make -j8 && \
+    make install && \
+    rm -rf /zstd-1.3.7 /zstd-1.3.7.tar.gz
 
 ENV OPENSSL_ROOT_DIR /usr/local/ssl/

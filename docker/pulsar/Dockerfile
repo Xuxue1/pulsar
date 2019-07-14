@@ -17,10 +17,8 @@
 # under the License.
 #
 
-FROM openjdk:8-jdk
-
-# Install some utilities
-RUN apt-get update && apt-get install -y netcat dnsutils python-kazoo python-yaml python-pip
+# First create a stage with just the Pulsar tarball and scripts
+FROM busybox as pulsar
 
 ARG PULSAR_TARBALL
 
@@ -32,10 +30,34 @@ COPY scripts/gen-yml-from-env.py /pulsar/bin
 COPY scripts/generate-zookeeper-config.sh /pulsar/bin
 COPY scripts/pulsar-zookeeper-ruok.sh /pulsar/bin
 COPY scripts/watch-znode.py /pulsar/bin
-COPY scripts/install-pulsar-client.sh /pulsar/bin
+COPY scripts/set_python_version.sh /pulsar/bin
+COPY scripts/install-pulsar-client-27.sh /pulsar/bin
+COPY scripts/install-pulsar-client-35.sh /pulsar/bin
+
+
+### Create 2nd stage from OpenJDK image
+### and add Python dependencies (for Pulsar functions)
+
+FROM openjdk:8-jdk-slim
+COPY --from=pulsar /pulsar /pulsar
+
+# Install some utilities
+RUN apt-get update \
+     && apt-get install -y netcat dnsutils \
+                 python2.7 python-setuptools \
+                 python3 python3-setuptools \
+                 curl \
+     && apt-get clean \
+     && rm -rf /var/lib/apt/lists/*
+
+RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+RUN python2.7 get-pip.py
+RUN pip install kazoo pyyaml
+RUN python3 get-pip.py
 
 ADD target/python-client/ /pulsar/pulsar-client
-RUN /pulsar/bin/install-pulsar-client.sh
+RUN /pulsar/bin/install-pulsar-client-27.sh
+RUN /pulsar/bin/install-pulsar-client-35.sh
 RUN echo networkaddress.cache.ttl=1 >> $JAVA_HOME/jre/lib/security/java.security
 
 WORKDIR /pulsar

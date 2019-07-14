@@ -27,6 +27,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import org.apache.pulsar.broker.PulsarServerException;
 import org.apache.pulsar.broker.ServiceConfiguration;
@@ -112,7 +113,7 @@ public class PulsarAuthorizationProvider implements AuthorizationProvider {
                         log.debug("Policies node couldn't be found for topic : {}", topicName);
                     }
                 } else {
-                    if (isNotBlank(subscription) && !isSuperUser(role)) {
+                    if (isNotBlank(subscription)) {
                         // validate if role is authorize to access subscription. (skip validatation if authorization
                         // list is empty)
                         Set<String> roles = policies.get().auth_policies.subscription_auth_roles.get(subscription);
@@ -206,6 +207,48 @@ public class PulsarAuthorizationProvider implements AuthorizationProvider {
             });
         });
         return finalResult;
+    }
+
+    @Override
+    public CompletableFuture<Boolean> allowFunctionOpsAsync(NamespaceName namespaceName, String role, AuthenticationDataSource authenticationData) {
+        CompletableFuture<Boolean> permissionFuture = new CompletableFuture<>();
+        try {
+            configCache.policiesCache().getAsync(POLICY_ROOT + namespaceName.toString()).thenAccept(policies -> {
+                if (!policies.isPresent()) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Policies node couldn't be found for namespace : {}", namespaceName);
+                    }
+                } else {
+                    Map<String, Set<AuthAction>> namespaceRoles = policies.get().auth_policies.namespace_auth;
+                    Set<AuthAction> namespaceActions = namespaceRoles.get(role);
+                    if (namespaceActions != null && namespaceActions.contains(AuthAction.functions)) {
+                        // The role has namespace level permission
+                        permissionFuture.complete(true);
+                        return;
+                    }
+
+                    // Using wildcard
+                    if (conf.isAuthorizationAllowWildcardsMatching()) {
+                        if (checkWildcardPermission(role, AuthAction.functions, namespaceRoles)) {
+                            // The role has namespace level permission by wildcard match
+                            permissionFuture.complete(true);
+                            return;
+                        }
+                    }
+                }
+                permissionFuture.complete(false);
+            }).exceptionally(ex -> {
+                log.warn("Client  with Role - {} failed to get permissions for namespace - {}. {}", role, namespaceName,
+                        ex.getMessage());
+                permissionFuture.completeExceptionally(ex);
+                return null;
+            });
+        } catch (Exception e) {
+            log.warn("Client  with Role - {} failed to get permissions for namespace - {}. {}", role, namespaceName,
+                    e.getMessage());
+            permissionFuture.completeExceptionally(e);
+        }
+        return permissionFuture;
     }
 
     @Override
@@ -323,12 +366,8 @@ public class PulsarAuthorizationProvider implements AuthorizationProvider {
     }
 
     private CompletableFuture<Boolean> checkAuthorization(TopicName topicName, String role, AuthAction action) {
-        if (isSuperUser(role)) {
-            return CompletableFuture.completedFuture(true);
-        } else {
-            return checkPermission(topicName, role, action)
-                    .thenApply(isPermission -> isPermission && checkCluster(topicName));
-        }
+        return checkPermission(topicName, role, action)
+                .thenApply(isPermission -> isPermission && checkCluster(topicName));
     }
 
     private boolean checkCluster(TopicName topicName) {
@@ -424,16 +463,6 @@ public class PulsarAuthorizationProvider implements AuthorizationProvider {
         return false;
     }
 
-    /**
-     * Super user roles are allowed to do anything, used for replication primarily
-     *
-     * @param role
-     *            the app id used to receive messages from the topic.
-     */
-    public boolean isSuperUser(String role) {
-        Set<String> superUserRoles = conf.getSuperUserRoles();
-        return role != null && superUserRoles.contains(role) ? true : false;
-    }
 
     @Override
     public void close() throws IOException {

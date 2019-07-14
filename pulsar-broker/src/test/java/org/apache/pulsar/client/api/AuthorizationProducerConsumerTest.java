@@ -45,6 +45,7 @@ import org.apache.pulsar.client.admin.PulsarAdmin;
 import org.apache.pulsar.common.naming.NamespaceName;
 import org.apache.pulsar.common.naming.TopicName;
 import org.apache.pulsar.common.policies.data.AuthAction;
+import org.apache.pulsar.common.policies.data.ClusterData;
 import org.apache.pulsar.common.policies.data.TenantInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -117,6 +118,8 @@ public class AuthorizationProducerConsumerTest extends ProducerConsumerBase {
         PulsarClient pulsarClientInvalidRole = PulsarClient.builder().serviceUrl(lookupUrl)
                 .authentication(authenticationInvalidRole).build();
 
+        admin.clusters().createCluster("test", new ClusterData(brokerUrl.toString()));
+
         admin.tenants().createTenant("my-property",
                 new TenantInfo(Sets.newHashSet("appid1", "appid2"), Sets.newHashSet("test")));
         admin.namespaces().createNamespace("my-property/my-ns", Sets.newHashSet("test"));
@@ -179,6 +182,8 @@ public class AuthorizationProducerConsumerTest extends ProducerConsumerBase {
         lookupUrl = new URI("pulsar://localhost:" + BROKER_PORT).toString();
 
         Authentication authentication = new ClientAuthentication(subscriptionRole);
+
+        superAdmin.clusters().createCluster("test", new ClusterData(brokerUrl.toString()));
 
         superAdmin.tenants().createTenant("my-property",
                 new TenantInfo(Sets.newHashSet(tenantRole), Sets.newHashSet("test")));
@@ -260,6 +265,8 @@ public class AuthorizationProducerConsumerTest extends ProducerConsumerBase {
         Authentication authentication = new ClientAuthentication(clientRole);
 
         pulsarClient = PulsarClient.builder().serviceUrl(lookupUrl).authentication(authentication).build();
+
+        admin.clusters().createCluster("test", new ClusterData(brokerUrl.toString()));
 
         admin.tenants().createTenant("prop-prefix",
                 new TenantInfo(Sets.newHashSet("appid1", "appid2"), Sets.newHashSet("test")));
@@ -402,13 +409,22 @@ public class AuthorizationProducerConsumerTest extends ProducerConsumerBase {
 
     public static class TestAuthorizationProvider implements AuthorizationProvider {
 
+        public ServiceConfiguration conf;
+
         @Override
         public void close() throws IOException {
             // No-op
         }
 
         @Override
+        public CompletableFuture<Boolean> isSuperUser(String role, ServiceConfiguration serviceConfiguration) {
+            Set<String> superUserRoles = serviceConfiguration.getSuperUserRoles();
+            return CompletableFuture.completedFuture(role != null && superUserRoles.contains(role) ? true : false);
+        }
+
+        @Override
         public void initialize(ServiceConfiguration conf, ConfigurationCacheService configCache) throws IOException {
+            this.conf = conf;
             // No-op
         }
 
@@ -428,6 +444,11 @@ public class AuthorizationProducerConsumerTest extends ProducerConsumerBase {
         public CompletableFuture<Boolean> canLookupAsync(TopicName topicName, String role,
                 AuthenticationDataSource authenticationData) {
             return CompletableFuture.completedFuture(clientAuthProviderSupportedRoles.contains(role));
+        }
+
+        @Override
+        public CompletableFuture<Boolean> allowFunctionOpsAsync(NamespaceName namespaceName, String role, AuthenticationDataSource authenticationData) {
+            return null;
         }
 
         @Override

@@ -19,22 +19,20 @@
 #ifndef PULSAR_AUTHENTICATION_H_
 #define PULSAR_AUTHENTICATION_H_
 
+#include <pulsar/defines.h>
 #include <vector>
 #include <string>
 #include <map>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include <pulsar/Result.h>
-#include <boost/make_shared.hpp>
-#include <boost/function.hpp>
-
-#pragma GCC visibility push(default)
+#include <functional>
 
 namespace pulsar {
 
 class ClientConfiguration;
 class Authentication;
 
-class AuthenticationDataProvider {
+class PULSAR_PUBLIC AuthenticationDataProvider {
    public:
     virtual ~AuthenticationDataProvider();
     virtual bool hasDataForTls();
@@ -50,11 +48,11 @@ class AuthenticationDataProvider {
     AuthenticationDataProvider();
 };
 
-typedef boost::shared_ptr<AuthenticationDataProvider> AuthenticationDataPtr;
-typedef boost::shared_ptr<Authentication> AuthenticationPtr;
+typedef std::shared_ptr<AuthenticationDataProvider> AuthenticationDataPtr;
+typedef std::shared_ptr<Authentication> AuthenticationPtr;
 typedef std::map<std::string, std::string> ParamMap;
 
-class Authentication {
+class PULSAR_PUBLIC Authentication {
    public:
     virtual ~Authentication();
     virtual const std::string getAuthMethodName() const = 0;
@@ -78,7 +76,7 @@ class Authentication {
  * To use authentication methods that are internally supported, you should
  * use `AuthTls::create("my-cert.pem", "my-private.key")` or similar.
  */
-class AuthFactory {
+class PULSAR_PUBLIC AuthFactory {
    public:
     static AuthenticationPtr Disabled();
 
@@ -101,7 +99,7 @@ class AuthFactory {
 /**
  * TLS implementation of Pulsar client authentication
  */
-class AuthTls : public Authentication {
+class PULSAR_PUBLIC AuthTls : public Authentication {
    public:
     AuthTls(AuthenticationDataPtr&);
     ~AuthTls();
@@ -115,12 +113,12 @@ class AuthTls : public Authentication {
     AuthenticationDataPtr authDataTls_;
 };
 
-typedef boost::function<std::string()> TokenSupplier;
+typedef std::function<std::string()> TokenSupplier;
 
 /**
  * Token based implementation of Pulsar client authentication
  */
-class AuthToken : public Authentication {
+class PULSAR_PUBLIC AuthToken : public Authentication {
    public:
     AuthToken(AuthenticationDataPtr&);
     ~AuthToken();
@@ -155,7 +153,7 @@ class AuthToken : public Authentication {
 /**
  * Athenz implementation of Pulsar client authentication
  */
-class AuthAthenz : public Authentication {
+class PULSAR_PUBLIC AuthAthenz : public Authentication {
    public:
     AuthAthenz(AuthenticationDataPtr&);
     ~AuthAthenz();
@@ -169,7 +167,5 @@ class AuthAthenz : public Authentication {
 };
 
 }  // namespace pulsar
-
-#pragma GCC visibility pop
 
 #endif /* PULSAR_AUTHENTICATION_H_ */

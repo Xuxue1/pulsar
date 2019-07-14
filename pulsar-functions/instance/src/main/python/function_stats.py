@@ -27,7 +27,7 @@ from ratelimit import limits, RateLimitException
 
 # We keep track of the following metrics
 class Stats(object):
-  metrics_label_names = ['tenant', 'namespace', 'function', 'instance_id', 'cluster', 'fqfn']
+  metrics_label_names = ['tenant', 'namespace', 'name', 'instance_id', 'cluster', 'fqfn']
 
   exception_metrics_label_names = metrics_label_names + ['error', 'ts']
 
@@ -103,7 +103,7 @@ class Stats(object):
     self._stat_total_received_1min = self.stat_total_received_1min.labels(*self.metrics_labels)
 
     # start time for windowed metrics
-    util.FixedTimer(60, self.reset).start()
+    util.FixedTimer(60, self.reset, name="windowed-metrics-timer").start()
 
   def get_total_received(self):
     return self._stat_total_received._value.get();
@@ -179,9 +179,9 @@ class Stats(object):
   def add_user_exception(self, exception):
     error = traceback.format_exc()
     ts = int(time.time() * 1000) if sys.version_info.major >= 3 else long(time.time() * 1000)
-    self.latest_sys_exception.append((error, ts))
-    if len(self.latest_sys_exception) > 10:
-      self.latest_sys_exception.pop(0)
+    self.latest_user_exception.append((error, ts))
+    if len(self.latest_user_exception) > 10:
+      self.latest_user_exception.pop(0)
 
     # report exception via prometheus
     try:
@@ -213,8 +213,6 @@ class Stats(object):
     self.system_exceptions.labels(*exception_metric_labels).set(1.0)
 
   def reset(self):
-    self.latest_user_exception = []
-    self.latest_sys_exception = []
     self._stat_total_processed_successfully_1min._value.set(0.0)
     self._stat_total_user_exceptions_1min._value.set(0.0)
     self._stat_total_sys_exceptions_1min._value.set(0.0)

@@ -59,9 +59,9 @@ public class WebSocketProxyConfiguration implements PulsarConfiguration {
     private long zooKeeperSessionTimeoutMillis = 30000;
 
     // Port to use to server HTTP request
-    private Integer webServicePort = 8080;
+    private Optional<Integer> webServicePort = Optional.of(8080);
     // Port to use to server HTTPS request
-    private Integer webServicePortTls;
+    private Optional<Integer> webServicePortTls = Optional.empty();
     // Hostname or IP address the service binds on, default is 0.0.0.0.
     private String bindAddress;
     // --- Authentication ---
@@ -90,13 +90,13 @@ public class WebSocketProxyConfiguration implements PulsarConfiguration {
     private String brokerClientTrustCertsFilePath = "";
 
     // Number of IO threads in Pulsar Client used in WebSocket proxy
-    private int numIoThreads = Runtime.getRuntime().availableProcessors();
+    private int webSocketNumIoThreads = Runtime.getRuntime().availableProcessors();
 
     // Number of threads to use in HTTP server
-    private int numHttpServerThreads = Runtime.getRuntime().availableProcessors();
+    private int numHttpServerThreads = Math.max(4, Runtime.getRuntime().availableProcessors());
 
     // Number of connections per Broker in Pulsar Client used in WebSocket proxy
-    private int connectionsPerBroker = Runtime.getRuntime().availableProcessors();
+    private int webSocketConnectionsPerBroker = Runtime.getRuntime().availableProcessors();
     // Time in milliseconds that idle WebSocket session times out
     private int webSocketSessionIdleTimeoutMillis = 300000;
 
@@ -119,6 +119,8 @@ public class WebSocketProxyConfiguration implements PulsarConfiguration {
     // Specify whether Client certificates are required for TLS
     // Reject the Connection if the Client Certificate is not trusted.
     private boolean tlsRequireTrustedClientCertOnConnect = false;
+    // Tls cert refresh duration in seconds (set 0 to check on every new connection) 
+    private long tlsCertRefreshCheckDurationSec = 300;
 
     private Properties properties = new Properties();
 
@@ -197,18 +199,18 @@ public class WebSocketProxyConfiguration implements PulsarConfiguration {
     }
 
     public Optional<Integer> getWebServicePort() {
-        return Optional.ofNullable(webServicePort);
+        return webServicePort;
     }
 
-    public void setWebServicePort(int webServicePort) {
+    public void setWebServicePort(Optional<Integer> webServicePort) {
         this.webServicePort = webServicePort;
     }
 
     public Optional<Integer> getWebServicePortTls() {
-        return Optional.ofNullable(webServicePortTls);
+        return webServicePortTls;
     }
 
-    public void setWebServicePortTls(int webServicePortTls) {
+    public void setWebServicePortTls(Optional<Integer> webServicePortTls) {
         this.webServicePortTls = webServicePortTls;
     }
 
@@ -292,12 +294,22 @@ public class WebSocketProxyConfiguration implements PulsarConfiguration {
         this.brokerClientAuthenticationParameters = brokerClientAuthenticationParameters;
     }
 
+    @Deprecated
     public int getNumIoThreads() {
-        return numIoThreads;
+        return getWebSocketNumIoThreads();
     }
 
+    @Deprecated
     public void setNumIoThreads(int numIoThreads) {
-        this.numIoThreads = numIoThreads;
+        setWebSocketNumIoThreads(numIoThreads);
+    }
+
+    public int getWebSocketNumIoThreads() {
+        return webSocketNumIoThreads;
+    }
+
+    public void setWebSocketNumIoThreads(int webSocketNumIoThreads) {
+        this.webSocketNumIoThreads = webSocketNumIoThreads;
     }
 
     public int getNumHttpServerThreads() {
@@ -308,12 +320,22 @@ public class WebSocketProxyConfiguration implements PulsarConfiguration {
         this.numHttpServerThreads = numHttpServerThreads;
     }
 
+    @Deprecated
     public int getConnectionsPerBroker() {
-        return connectionsPerBroker;
+        return getWebSocketConnectionsPerBroker();
     }
 
+    @Deprecated
     public void setConnectionsPerBroker(int connectionsPerBroker) {
-        this.connectionsPerBroker = connectionsPerBroker;
+        setWebSocketConnectionsPerBroker(connectionsPerBroker);
+    }
+
+    public int getWebSocketConnectionsPerBroker() {
+        return webSocketConnectionsPerBroker;
+    }
+
+    public void setWebSocketConnectionsPerBroker(int webSocketConnectionsPerBroker) {
+        this.webSocketConnectionsPerBroker = webSocketConnectionsPerBroker;
     }
 
     public int getWebSocketSessionIdleTimeoutMillis() {
@@ -386,5 +408,13 @@ public class WebSocketProxyConfiguration implements PulsarConfiguration {
 
     public void setTlsRequireTrustedClientCertOnConnect(boolean tlsRequireTrustedClientCertOnConnect) {
         this.tlsRequireTrustedClientCertOnConnect = tlsRequireTrustedClientCertOnConnect;
+    }
+    
+    public long getTlsCertRefreshCheckDurationSec() {
+        return tlsCertRefreshCheckDurationSec;
+    }
+
+    public void setTlsCertRefreshCheckDurationSec(long tlsCertRefreshCheckDurationSec) {
+        this.tlsCertRefreshCheckDurationSec = tlsCertRefreshCheckDurationSec;
     }
 }

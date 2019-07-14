@@ -25,6 +25,7 @@ import org.apache.pulsar.client.admin.PulsarAdminException.NotAuthorizedExceptio
 import org.apache.pulsar.client.admin.PulsarAdminException.NotFoundException;
 import org.apache.pulsar.client.admin.PulsarAdminException.PreconditionFailedException;
 import org.apache.pulsar.common.functions.FunctionState;
+import org.apache.pulsar.common.functions.UpdateOptions;
 import org.apache.pulsar.common.io.ConnectorDefinition;
 import org.apache.pulsar.common.policies.data.FunctionStats;
 import org.apache.pulsar.common.functions.FunctionConfig;
@@ -124,6 +125,23 @@ public interface Functions {
 
     /**
      * Update the configuration for a function.
+     * <p>
+     *
+     * @param functionConfig
+     *            the function configuration object
+     * @param updateOptions
+     *            options for the update operations
+     * @throws NotAuthorizedException
+     *             You don't have admin permission to create the cluster
+     * @throws NotFoundException
+     *             Cluster doesn't exist
+     * @throws PulsarAdminException
+     *             Unexpected error
+     */
+    void updateFunction(FunctionConfig functionConfig, String fileName, UpdateOptions updateOptions) throws PulsarAdminException;
+
+    /**
+     * Update the configuration for a function.
      * <pre>
      * Update a function by providing url from which fun-pkg can be downloaded. supported url: http/file
      * eg:
@@ -143,6 +161,31 @@ public interface Functions {
      *             Unexpected error
      */
     void updateFunctionWithUrl(FunctionConfig functionConfig, String pkgUrl) throws PulsarAdminException;
+
+    /**
+     * Update the configuration for a function.
+     * <pre>
+     * Update a function by providing url from which fun-pkg can be downloaded. supported url: http/file
+     * eg:
+     * File: file:/dir/fileName.jar
+     * Http: http://www.repo.com/fileName.jar
+     * </pre>
+     *
+     * @param functionConfig
+     *            the function configuration object
+     * @param pkgUrl
+     *            url from which pkg can be downloaded
+     * @param updateOptions
+     *            options for the update operations
+     * @throws NotAuthorizedException
+     *             You don't have admin permission to create the cluster
+     * @throws NotFoundException
+     *             Cluster doesn't exist
+     * @throws PulsarAdminException
+     *             Unexpected error
+     */
+    void updateFunctionWithUrl(FunctionConfig functionConfig, String pkgUrl, UpdateOptions updateOptions) throws PulsarAdminException;
+
 
     /**
      * Delete an existing function
@@ -285,6 +328,39 @@ public interface Functions {
     void stopFunction(String tenant, String namespace, String function, int instanceId) throws PulsarAdminException;
 
     /**
+     * Start all function instances
+     *
+     * @param tenant
+     *            Tenant name
+     * @param namespace
+     *            Namespace name
+     * @param function
+     *            Function name
+     *
+     * @throws PulsarAdminException
+     *             Unexpected error
+     */
+    void startFunction(String tenant, String namespace, String function) throws PulsarAdminException;
+
+    /**
+     * Start function instance
+     *
+     * @param tenant
+     *            Tenant name
+     * @param namespace
+     *            Namespace name
+     * @param function
+     *            Function name
+     *
+     * @param instanceId
+     *            Function instanceId
+     *
+     * @throws PulsarAdminException
+     *             Unexpected error
+     */
+    void startFunction(String tenant, String namespace, String function, int instanceId) throws PulsarAdminException;
+
+    /**
      * Stop all function instances
      *
      * @param tenant
@@ -298,6 +374,7 @@ public interface Functions {
      *             Unexpected error
      */
     void stopFunction(String tenant, String namespace, String function) throws PulsarAdminException;
+
 
     /**
      * Triggers the function by writing to the input topic.
@@ -345,30 +422,54 @@ public interface Functions {
     void downloadFunction(String destinationFile, String path) throws PulsarAdminException;
 
     /**
+     * Download Function Code.
+     *
+     * @param destinationFile
+     *           file where data should be downloaded to
+     * @param tenant
+     *            Tenant name
+     * @param namespace
+     *            Namespace name
+     * @param function
+     *            Function name
+     * @throws PulsarAdminException
+     */
+    void downloadFunction(String destinationFile, String tenant, String namespace, String function) throws PulsarAdminException;
+
+    /**
+     * Deprecated in favor of getting sources and sinks for their own APIs
+     *
      * Fetches a list of supported Pulsar IO connectors currently running in cluster mode
      *
      * @throws PulsarAdminException
      *             Unexpected error
      *
      */
+    @Deprecated
     List<ConnectorDefinition> getConnectorsList() throws PulsarAdminException;
 
     /**
+     * Deprecated in favor of getting sources and sinks for their own APIs
+     *
      * Fetches a list of supported Pulsar IO sources currently running in cluster mode
      *
      * @throws PulsarAdminException
      *             Unexpected error
      *
      */
+    @Deprecated
     Set<String> getSources() throws PulsarAdminException;
 
     /**
+     * Deprecated in favor of getting sources and sinks for their own APIs
+     *
      * Fetches a list of supported Pulsar IO sinks currently running in cluster mode
      *
      * @throws PulsarAdminException
      *             Unexpected error
      *
      */
+    @Deprecated
     Set<String> getSinks() throws PulsarAdminException;
 
     /**
@@ -399,4 +500,31 @@ public interface Functions {
      *             Unexpected error
      */
     FunctionState getFunctionState(String tenant, String namespace, String function, String key) throws PulsarAdminException;
+
+    /**
+     * Puts the given state associated with a Pulsar Function.
+     * <p>
+     * Response Example:
+     *
+     * <pre>
+     * <code>{ "value : 12, version : 2"}</code>
+     * </pre>
+     *
+     * @param tenant
+     *            Tenant name
+     * @param namespace
+     *            Namespace name
+     * @param function
+     *            Function name
+     * @param state
+     *            FunctionState
+     **
+     * @throws NotAuthorizedException
+     *             You don't have admin permission to get the configuration of the cluster
+     * @throws NotFoundException
+     *             Cluster doesn't exist
+     * @throws PulsarAdminException
+     *             Unexpected error
+     */
+    void putFunctionState(String tenant, String namespace, String function, FunctionState state) throws PulsarAdminException;
 }

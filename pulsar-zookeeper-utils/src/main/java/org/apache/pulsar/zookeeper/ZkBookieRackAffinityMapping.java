@@ -18,6 +18,7 @@
  */
 package org.apache.pulsar.zookeeper;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.net.UnknownHostException;
@@ -25,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.bookkeeper.client.RackChangeNotifier;
 import org.apache.bookkeeper.client.RackawareEnsemblePlacementPolicyImpl;
@@ -37,6 +39,7 @@ import org.apache.commons.configuration.Configuration;
 import org.apache.pulsar.common.policies.data.BookieInfo;
 import org.apache.pulsar.common.policies.data.BookiesRackConfiguration;
 import org.apache.pulsar.common.util.ObjectMapperFactory;
+import org.apache.pulsar.zookeeper.ZooKeeperCache.Deserializer;
 import org.apache.zookeeper.ZooKeeper;
 import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
@@ -102,7 +105,7 @@ public class ZkBookieRackAffinityMapping extends AbstractDNSToSwitchMapping
                 try {
                     ZooKeeper zkClient = ZooKeeperClient.newBuilder().connectString(zkServers)
                             .sessionTimeoutMs(zkTimeout).build();
-                    zkCache = new ZooKeeperCache(zkClient) {
+                    zkCache = new ZooKeeperCache(zkClient, (int) TimeUnit.MILLISECONDS.toSeconds(zkTimeout)) {
                     };
                     conf.addProperty(ZooKeeperCache.ZK_CACHE_INSTANCE, zkCache);
                 } catch (Exception e) {

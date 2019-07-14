@@ -36,9 +36,20 @@ import org.apache.pulsar.common.policies.data.AuthAction;
 public interface AuthorizationProvider extends Closeable {
 
     /**
+     * Check if specified role is a super user
+     * @param role the role to check
+     * @return a CompletableFuture containing a boolean in which true means the role is a super user
+     * and false if it is not
+     */
+    default CompletableFuture<Boolean> isSuperUser(String role, ServiceConfiguration serviceConfiguration) {
+        Set<String> superUserRoles = serviceConfiguration.getSuperUserRoles();
+        return CompletableFuture.completedFuture(role != null && superUserRoles.contains(role) ? true : false);
+    }
+
+    /**
      * Perform initialization for the authorization provider
      *
-     * @param config
+     * @param conf
      *            broker config object
      * @param configCache
      *            pulsar zk configuration cache service
@@ -83,6 +94,16 @@ public interface AuthorizationProvider extends Closeable {
      */
     CompletableFuture<Boolean> canLookupAsync(TopicName topicName, String role,
             AuthenticationDataSource authenticationData);
+
+    /**
+     * Allow all function operations with in this namespace
+     * @param namespaceName The namespace that the function operations can be executed in
+     * @param role The role to check
+     * @param authenticationData authentication data related to the role
+     * @return a boolean to determine whether authorized or not
+     */
+    CompletableFuture<Boolean> allowFunctionOpsAsync(NamespaceName namespaceName, String role,
+                                                     AuthenticationDataSource authenticationData);
 
     /**
      *

@@ -1,6 +1,6 @@
 {
   "docs": {
-    "Getting started": [
+    "Get started": [
       "pulsar-2.0",
       "standalone",
       "standalone-docker",
@@ -25,7 +25,10 @@
       "functions-deploying",
       "functions-guarantees",
       "functions-state",
-      "functions-metrics"
+      "functions-metrics",
+      "functions-worker",
+      "functions-runtime",
+      "functions-debugging"
     ],
     "Pulsar IO": [
       "io-overview",
@@ -53,7 +56,7 @@
       "administration-geo",
       "administration-dashboard",
       "administration-stats",
-      "administration-load-distribution",
+      "administration-load-balance",
       "administration-proxy"
     ],
     "Security": [
@@ -63,6 +66,7 @@
       "security-token-client",
       "security-token-admin",
       "security-athenz",
+      "security-kerberos",
       "security-authorization",
       "security-encryption",
       "security-extending"
@@ -99,7 +103,8 @@
       "cookbooks-partitioned",
       "cookbooks-retention-expiry",
       "cookbooks-encryption",
-      "cookbooks-message-queue"
+      "cookbooks-message-queue",
+      "cookbooks-bookkeepermetadata"
     ],
     "Development": [
       "develop-tools",

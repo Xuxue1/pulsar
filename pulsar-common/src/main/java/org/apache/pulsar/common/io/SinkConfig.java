@@ -51,7 +51,7 @@ public class SinkConfig {
 
     private Map<String, String> topicToSchemaType;
 
-    private Map<String, ConsumerConfig> inputSpecs = new TreeMap<>();
+    private Map<String, ConsumerConfig> inputSpecs;
 
     private Map<String, Object> configs;
     // This is a map of secretName(aka how the secret is going to be
@@ -66,6 +66,10 @@ public class SinkConfig {
     private Resources resources;
     private Boolean autoAck;
     private Long timeoutMs;
-
     private String archive;
+    // Whether the subscriptions the functions created/used should be deleted when the functions is deleted
+    private Boolean cleanupSubscription;
+
+    // Any flags that you want to pass to the runtime.
+    private String runtimeFlags;
 }

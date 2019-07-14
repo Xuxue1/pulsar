@@ -223,6 +223,10 @@ public class ManagedCursorContainerTest {
         }
 
         @Override
+        public void setAlwaysInactive() {
+        }
+
+        @Override
         public List<Entry> replayEntries(Set<? extends Position> positions)
                 throws InterruptedException, ManagedLedgerException {
             return null;
@@ -230,6 +234,11 @@ public class ManagedCursorContainerTest {
 
         @Override
         public Set<? extends Position> asyncReplayEntries(Set<? extends Position> positions, ReadEntriesCallback callback, Object ctx) {
+            return Sets.newConcurrentHashSet();
+        }
+
+        @Override
+        public Set<? extends Position> asyncReplayEntries(Set<? extends Position> positions, ReadEntriesCallback callback, Object ctx, boolean sortEntries) {
             return Sets.newConcurrentHashSet();
         }
 

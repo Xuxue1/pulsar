@@ -31,17 +31,22 @@ import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.apache.pulsar.client.api.ConsumerCryptoFailureAction;
 import org.apache.pulsar.client.api.ConsumerEventListener;
 import org.apache.pulsar.client.api.CryptoKeyReader;
 import org.apache.pulsar.client.api.DeadLetterPolicy;
 import org.apache.pulsar.client.api.MessageListener;
+import org.apache.pulsar.client.api.RegexSubscriptionMode;
 import org.apache.pulsar.client.api.SubscriptionInitialPosition;
 import org.apache.pulsar.client.api.SubscriptionType;
-import org.apache.pulsar.common.api.proto.PulsarApi.CommandGetTopicsOfNamespace.Mode;
 
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class ConsumerConfigurationData<T> implements Serializable, Cloneable {
     private static final long serialVersionUID = 1L;
 
@@ -62,6 +67,8 @@ public class ConsumerConfigurationData<T> implements Serializable, Cloneable {
     private int receiverQueueSize = 1000;
 
     private long acknowledgementsGroupTimeMicros = TimeUnit.MILLISECONDS.toMicros(100);
+
+    private long negativeAckRedeliveryDelayMicros = TimeUnit.MINUTES.toMicros(1);
 
     private int maxTotalReceiverQueueSizeAcrossPartitions = 50000;
 
@@ -86,9 +93,15 @@ public class ConsumerConfigurationData<T> implements Serializable, Cloneable {
 
     private int patternAutoDiscoveryPeriod = 1;
 
-    private Mode subscriptionTopicsMode = Mode.PERSISTENT;
+    private RegexSubscriptionMode regexSubscriptionMode = RegexSubscriptionMode.PersistentOnly;
 
     private DeadLetterPolicy deadLetterPolicy;
+
+    private boolean autoUpdatePartitions = true;
+
+    private boolean replicateSubscriptionState = false;
+
+    private boolean resetIncludeHead = false;
 
     @JsonIgnore
     public String getSingleTopic() {
